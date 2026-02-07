@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from asgiref.sync import sync_to_async
+from aiogram.types import FSInputFile 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 router = Router()
@@ -106,6 +107,7 @@ async def process_book_number(message: Message, state: FSMContext):
         await state.clear()
         return
 
+    # Формируем подробную карточку
     text = f"📘 <b>{ub.book.title}</b>\n"
     text += f"✍️ Автор: {ub.book.author}\n"
     if ub.book.genre:
@@ -125,32 +127,35 @@ async def process_book_number(message: Message, state: FSMContext):
     if ub.review:
         text += f"\n💭 <b>Мои впечатления:</b>\n{ub.review}\n"
 
-    caption = text[:1024]  # Лимит Telegram
-
-    # Восстанавливаем полный путь к обложке
-    cover_path = None
-    if ub.book.cover_path:
-        possible_paths = [
-            BASE_DIR / ub.book.cover_path,
-            BASE_DIR / "media" / "covers" / os.path.basename(ub.book.cover_path)
-        ]
-        for p in possible_paths:
-            if p.exists():
-                cover_path = str(p)
-                break
-
+    # === ОТПРАВКА ОБЛОЖКИ (рабочий способ для aiogram 3.x) ===
+    cover_path = ub.book.cover_path
     if cover_path:
+        from pathlib import Path
+        candidates = [
+        BASE_DIR / cover_path,
+        BASE_DIR / "media" / "covers" / Path(cover_path).name,
+        BASE_DIR / "media" / cover_path,
+    ]
+    found_path = None
+    for cand in candidates:
+        if cand.exists():
+            found_path = str(cand)
+            break
+
+    if found_path:
         try:
-            with open(cover_path, 'rb') as photo_file:
-                await message.answer_photo(
-                    photo=photo_file,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
+            from aiogram.types import FSInputFile
+            photo = FSInputFile(found_path)
+            await message.answer_photo(
+                photo=photo,
+                caption=text[:1024],
+                parse_mode="HTML"
+            )
+            await state.clear()
             return
         except Exception as e:
-            print(f"❌ Ошибка отправки фото: {e}")
+            print(f"❌ Ошибка отправки обложки: {e}")
 
-    # Если фото не отправлено — просто текст
+# Если фото не отправлено — просто текст
     await message.answer(text, parse_mode="HTML")
     await state.clear()
