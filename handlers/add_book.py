@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -25,9 +25,13 @@ class AddBook(StatesGroup):
 
 @router.message(Command("add_book"))
 async def cmd_add_book(message: Message, state: FSMContext):
+    user = message.from_user.first_name or "друг"
     await message.answer(
-        "📘 Введите название книги.\n"
-        "Отменить: /cancel"
+        f"Привет, {user}! 📖\n\n"
+        "Давайте добавим новую книгу в вашу библиотеку!\n\n"
+        "Напишите <b>название книги</b> — например, «1984» или «Мастер и Маргарита».\n\n"
+        "💡 В любой момент можно отменить — просто напишите /cancel",
+        parse_mode="HTML"
     )
     await state.set_state(AddBook.title)
 
@@ -37,7 +41,11 @@ async def process_title(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     await state.update_data(title=message.text.strip())
-    await message.answer("✍️ Введите автора.\nОтменить: /cancel")
+    await message.answer(
+        "Отличный выбор! 👏\n\n"
+        "Теперь укажите <b>автора</b> этой книги.",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.author)
 
 @router.message(AddBook.author)
@@ -46,7 +54,11 @@ async def process_author(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     await state.update_data(author=message.text.strip())
-    await message.answer("📚 Введите жанр.\nОтменить: /cancel")
+    await message.answer(
+        "📚 Какой <b>жанр</b> у этой книги?\n"
+        "(например: фантастика, детектив, роман, антиутопия...)",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.genre)
 
 @router.message(AddBook.genre)
@@ -55,7 +67,10 @@ async def process_genre(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     await state.update_data(genre=message.text.strip())
-    await message.answer("📅 Введите год издания (или пропустите).\nОтменить: /cancel")
+    await message.answer(
+        "📅 Укажите <b>год издания</b> (можно пропустить, просто отправьте любое сообщение).",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.year)
 
 @router.message(AddBook.year)
@@ -67,7 +82,10 @@ async def process_year(message: Message, state: FSMContext):
     if message.text.isdigit():
         year = int(message.text)
     await state.update_data(year=year)
-    await message.answer("✅ Книга уже прочитана? Ответьте: да / нет\nОтменить: /cancel")
+    await message.answer(
+        "✨ Книга уже прочитана? Ответьте: <b>да</b> или <b>нет</b>.",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.status)
 
 @router.message(AddBook.status)
@@ -81,10 +99,14 @@ async def process_status(message: Message, state: FSMContext):
     elif text in ["нет", "no", "n"]:
         await state.update_data(status="want_to_read")
     else:
-        await message.answer("Пожалуйста, ответьте: да или нет\nОтменить: /cancel")
+        await message.answer("Пожалуйста, ответьте: <b>да</b> или <b>нет</b>.", parse_mode="HTML")
         return
 
-    await message.answer("🖼️ Отправьте обложку книги (фото) или напишите «пропустить»:\nОтменить: /cancel")
+    await message.answer(
+        "🖼️ Отправьте <b>обложку книги</b> (фото) или напишите «пропустить».\n\n"
+        "Это сделает вашу библиотеку ещё красивее! ✨",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.cover)
 
 @router.message(AddBook.cover)
@@ -106,17 +128,20 @@ async def process_cover(message: Message, state: FSMContext):
         full_path = covers_dir / filename
         await message.bot.download_file(file_info.file_path, full_path)
         
-        # Сохраняем ОТНОСИТЕЛЬНЫЙ путь от корня проекта
         cover_path = str(full_path.relative_to(BASE_DIR))
-        await message.answer("✅ Обложка сохранена!")
+        await message.answer("✅ Обложка сохранена! Теперь ваша книга выглядит ещё лучше!")
     elif message.text and message.text.strip().lower() == "пропустить":
-        await message.answer("⏭️ Обложка пропущена.")
+        await message.answer("⏭️ Хорошо, обложку пропускаем. Всё равно книга будет в вашей коллекции!")
     else:
         await message.answer("Пожалуйста, отправьте фото или напишите «пропустить».")
         return
 
     await state.update_data(cover_path=cover_path)
-    await message.answer("📖 Введите описание книги или пропустите:\nОтменить: /cancel")
+    await message.answer(
+        "📖 Хотите добавить <b>краткое описание</b> (аннотацию)?\n"
+        "Это поможет вам вспомнить сюжет через год! Можно пропустить.",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.description)
 
 @router.message(AddBook.description)
@@ -127,7 +152,11 @@ async def process_description(message: Message, state: FSMContext):
     await state.update_data(description=message.text.strip())
     data = await state.get_data()
     if data["status"] == "read":
-        await message.answer("💭 Ваши впечатления от книги (рецензия) или пропустите:\nОтменить: /cancel")
+        await message.answer(
+            "💭 А теперь — самое интересное! Напишите <b>ваши впечатления</b> от книги.\n"
+            "Что запомнилось? Что тронуло? Это будет ваша личная рецензия!",
+            parse_mode="HTML"
+        )
         await state.set_state(AddBook.review)
     else:
         await save_book_to_db(message, state)
@@ -138,7 +167,11 @@ async def process_review(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     await state.update_data(review=message.text.strip())
-    await message.answer("⭐ Оцените книгу от 1 до 5:\nОтменить: /cancel")
+    await message.answer(
+        "⭐ Как бы вы оценили эту книгу по 5-балльной шкале?\n"
+        "Отправьте число от 1 до 5."
+        # ← Без HTML → без parse_mode
+    )
     await state.set_state(AddBook.rating)
 
 @router.message(AddBook.rating)
@@ -148,10 +181,14 @@ async def process_rating(message: Message, state: FSMContext):
         return
     if message.text.isdigit() and 1 <= int(message.text) <= 5:
         await state.update_data(rating=int(message.text))
-        await message.answer("📆 Введите дату прочтения (ГГГГ-ММ-ДД) или напишите 'сегодня':\nОтменить: /cancel")
+        await message.answer(
+            "📆 Когда вы её прочитали? Укажите дату в формате <b>ГГГГ-ММ-ДД</b>\n"
+            "Или просто напишите «сегодня» — я сам всё подставлю! 📅",
+            parse_mode="HTML"
+        )
         await state.set_state(AddBook.date_read)
     else:
-        await message.answer("Пожалуйста, введите число от 1 до 5.\nОтменить: /cancel")
+        await message.answer("Пожалуйста, введите число от 1 до 5.")
 
 @router.message(AddBook.date_read)
 async def process_date_read(message: Message, state: FSMContext):
@@ -167,7 +204,7 @@ async def process_date_read(message: Message, state: FSMContext):
             from datetime import datetime
             date_read = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            await message.answer("Неверный формат. Используйте ГГГГ-ММ-ДД или 'сегодня'.\nОтменить: /cancel")
+            await message.answer("Неверный формат. Используйте ГГГГ-ММ-ДД или «сегодня».")
             return
     await state.update_data(date_read=date_read)
     await save_book_to_db(message, state)
@@ -209,9 +246,18 @@ async def save_book_to_db(message: Message, state: FSMContext):
         username=message.from_user.username,
         data=data
     )
-    await message.answer("✅ Книга успешно добавлена!")
+    title = data.get("title", "книга")
+    await message.answer(
+        f"🎉 Ура! Книга «<b>{title}</b>» успешно добавлена в вашу библиотеку!\n\n"
+        "Хотите посмотреть её сейчас? Напишите /my_books",
+        parse_mode="HTML"
+    )
     await state.clear()
 
 async def cancel_handler(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("❌ Добавление книги отменено.")
+    await message.answer(
+        "❌ Добавление отменено.\n\n"
+        "Не переживайте — вы всегда можете начать заново командой /add_book!",
+        reply_markup=ReplyKeyboardRemove()
+    )

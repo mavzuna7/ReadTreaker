@@ -1,6 +1,6 @@
 # handlers/search.py
 from aiogram import Router
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardRemove, Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -40,7 +40,7 @@ async def cmd_search(message: Message, state: FSMContext):
             [KeyboardButton(text="Отмена")]
         ],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True  # ← клавиатура исчезнет после выбора
     )
     await message.answer("🔍 Выберите, по какому полю искать:", reply_markup=kb)
     await state.set_state(SearchBooks.selecting_field)
@@ -49,7 +49,7 @@ async def cmd_search(message: Message, state: FSMContext):
 async def process_select_field(message: Message, state: FSMContext):
     if message.text == "Отмена" or message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Поиск отменён.")
+        await message.answer("❌ Поиск отменён.", reply_markup=ReplyKeyboardRemove())  # ← УДАЛЯЕМ КЛАВИАТУРУ
         return
 
     field_map = {
@@ -66,14 +66,17 @@ async def process_select_field(message: Message, state: FSMContext):
     await state.update_data(search_field=field)
     
     label = message.text.replace("По ", "").lower()
-    await message.answer(f"Введите ключевое слово для поиска {label}:")
+    await message.answer(
+        f"Введите ключевое слово для поиска {label}:",
+        reply_markup=ReplyKeyboardRemove()  # ← СРАЗУ УБИРАЕМ КЛАВИАТУРУ
+    )
     await state.set_state(SearchBooks.entering_query)
 
 @router.message(SearchBooks.entering_query)
 async def process_query(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Поиск отменён.")
+        await message.answer("❌ Поиск отменён.", reply_markup=ReplyKeyboardRemove())  # ← УДАЛЯЕМ
         return
 
     query = message.text.strip()
@@ -87,7 +90,7 @@ async def process_query(message: Message, state: FSMContext):
     books = await search_books_by_field(message.from_user.id, field, query)
 
     if not books:
-        await message.answer("❌ Ничего не найдено.")
+        await message.answer("❌ Ничего не найдено.", reply_markup=ReplyKeyboardRemove())  # ← УДАЛЯЕМ
         await state.clear()
         return
 
@@ -99,7 +102,7 @@ async def process_query(message: Message, state: FSMContext):
         text += f"{i}. {status} {ub.book.title} — {ub.book.author}{rating}{date}\n"
 
     text += "\n📖 Отправьте номер книги для просмотра подробностей или /cancel для отмены."
-    await message.answer(text)
+    await message.answer(text, reply_markup=ReplyKeyboardRemove())  # ← УДАЛЯЕМ (если нужно оставить — убери эту строку)
     await state.update_data(found_books=[b.id for b in books])
     await state.set_state(SearchBooks.viewing_results)
 
@@ -107,7 +110,7 @@ async def process_query(message: Message, state: FSMContext):
 async def process_view_result(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Просмотр отменён.")
+        await message.answer("❌ Просмотр отменён.", reply_markup=ReplyKeyboardRemove())  # ← УДАЛЯЕМ
         return
 
     if not message.text.isdigit():
@@ -169,6 +172,7 @@ async def process_view_result(message: Message, state: FSMContext):
         try:
             with open(cover_path, 'rb') as photo:
                 await message.answer_photo(photo=photo, caption=caption, parse_mode="HTML")
+            await state.clear()
             return
         except:
             pass

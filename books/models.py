@@ -22,4 +22,5 @@ class UserBook(models.Model):
     rating = models.IntegerField(null=True, blank=True)
     date_read = models.DateField(null=True, blank=True)
     description = models.TextField("Описание книги", blank=True)      # аннотация
-    review = models.TextField("Мои впечатления", blank=True)        # личная рецензия
+    review = models.TextField("Мои впечатления", blank=True)   
+    is_favorite = models.BooleanField("В избранном", default=False)      # личная рецензия

@@ -25,6 +25,10 @@ from handlers.delete_book import router as delete_book_router
 from handlers.search import router as search_router
 from handlers.edit_book import router as edit_book_router
 from handlers.stats import router as stats_router
+from handlers.recommend import router as recommend_router
+from handlers.export import router as export_router
+from handlers.favorite import router as favorite_router
+from handlers.favorites import router as favorites_router
 
 async def main():
     logging.basicConfig(level=logging.INFO)
@@ -39,6 +43,10 @@ async def main():
     dp.include_router(edit_book_router)
     dp.include_router(search_router)
     dp.include_router(stats_router)
+    dp.include_router(recommend_router)
+    dp.include_router(export_router)
+    dp.include_router(favorite_router)
+    dp.include_router(favorites_router)
 
     await dp.start_polling(bot)
 
