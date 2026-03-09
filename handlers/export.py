@@ -13,12 +13,11 @@ def get_user_books_for_export(telegram_id):
     from books.models import TelegramUser, UserBook
     try:
         user = TelegramUser.objects.get(telegram_id=telegram_id)
-        # Получаем все книги пользователя, сортируем: сначала прочитанные (по дате), потом "хочу прочитать"
         books = (
             UserBook.objects
             .filter(user=user)
             .select_related('book')
-            .order_by('-status', '-date_read')  # 'read' > 'want_to_read'
+            .order_by('-status', '-date_read')
         )
         return list(books)
     except Exception as e:
@@ -30,10 +29,12 @@ async def cmd_export(message: Message):
     books = await get_user_books_for_export(message.from_user.id)
 
     if not books:
-        await message.answer("📭 У вас нет книг для экспорта.")
+        await message.answer(
+            "📭 Похоже, у вас пока нет книг для экспорта.\n"
+            "Добавьте первую командой /add_book!"
+        )
         return
 
-    # Формируем содержимое файла
     lines = [
         "📚 Моя библиотека — ReadTreakerBot",
         "=" * 50,
@@ -42,8 +43,7 @@ async def cmd_export(message: Message):
 
     for ub in books:
         status_icon = "✅" if ub.status == "read" else "⏳"
-        status_text = "Прочитано" if ub.status == "read" else "Хочу прочитать"
-        line = f"{status_icon} {ub.book.title} — {ub.book.author}"
+        line = f"{status_icon} <b>{ub.book.title}</b> — {ub.book.author}"
         
         details = []
         if ub.book.genre:
@@ -56,7 +56,6 @@ async def cmd_export(message: Message):
             if ub.date_read:
                 details.append(f"Дата: {ub.date_read}")
         if ub.description:
-            # Обрезаем длинное описание
             desc = ub.description[:60] + "..." if len(ub.description) > 60 else ub.description
             details.append(f"Описание: {desc}")
         if ub.review:
@@ -76,5 +75,6 @@ async def cmd_export(message: Message):
 
     await message.answer_document(
         document=document,
-        caption="📥 Ваша библиотека экспортирована!"
+        caption="📥 Ваша библиотека успешно экспортирована!\n\n"
+                "Теперь вы можете сохранить её на устройстве или распечатать. 📖✨"
     )

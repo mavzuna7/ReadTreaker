@@ -3,7 +3,6 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
 from asgiref.sync import sync_to_async
-from django.db import models
 
 router = Router()
 
@@ -14,7 +13,6 @@ def get_user_stats(telegram_id):
     try:
         user = TelegramUser.objects.get(telegram_id=telegram_id)
         
-        # Все книги пользователя
         all_books = UserBook.objects.filter(user=user)
         read_books = all_books.filter(status='read')
         want_books = all_books.filter(status='want_to_read')
@@ -70,25 +68,30 @@ async def cmd_stats(message: Message):
     stats = await get_user_stats(message.from_user.id)
     
     if not stats or (stats['total_read'] == 0 and stats['total_want'] == 0):
-        await message.answer("📭 У вас пока нет данных для статистики.")
+        await message.answer(
+            "📭 Пока что у вас нет данных для статистики.\n"
+            "Добавьте первую книгу через /add_book — и цифры заиграют! 📚✨"
+        )
         return
 
-    text = "📊 <b>Ваша статистика</b>\n\n"
+    text = "📊 <b>Ваша книжная статистика</b>\n\n"
     
-    text += f"✅ Прочитано: {stats['total_read']}\n"
-    text += f"⏳ Хочу прочитать: {stats['total_want']}\n"
+    text += f"✅ Прочитано: <b>{stats['total_read']}</b> книга(и)\n"
+    text += f"⏳ В планах: <b>{stats['total_want']}</b> книга(и)\n"
     
     if stats['avg_rating']:
-        text += f"⭐ Средняя оценка: {stats['avg_rating']}\n"
+        text += f"⭐ Средняя оценка: <b>{stats['avg_rating']}</b>\n"
     
     if stats['last_book']:
         date_str = str(stats['last_book']['date']) if stats['last_book']['date'] else ""
-        text += f"📆 Последняя книга: {stats['last_book']['title']} — {stats['last_book']['author']}"
+        text += f"📆 Последняя книга: <b>{stats['last_book']['title']}</b> — {stats['last_book']['author']}"
         if date_str:
-            text += f" ({date_str})"
+            text += f" (<i>{date_str}</i>)"
         text += "\n"
     
     if stats['top_genre']:
-        text += f"📚 Любимый жанр: {stats['top_genre']}\n"
+        text += f"📚 Любимый жанр: <b>{stats['top_genre']}</b>\n"
     
+    text += "\n📖 Продолжайте читать — ваша статистика растёт с каждой книгой!"
+
     await message.answer(text, parse_mode="HTML")

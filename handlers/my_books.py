@@ -2,12 +2,12 @@
 import os
 from pathlib import Path
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from asgiref.sync import sync_to_async
-from aiogram.types import FSInputFile 
+from aiogram.types import FSInputFile
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 router = Router()
@@ -53,30 +53,33 @@ async def cmd_my_books(message: Message, state: FSMContext):
     read_books, want_books = await get_user_books_with_ids(message.from_user.id)
 
     if not read_books and not want_books:
-        await message.answer("📭 У вас пока нет добавленных книг.")
+        await message.answer(
+            "📭 Похоже, у вас пока нет книг.\n"
+            "Добавьте первую командой /add_book!"
+        )
         return
 
-    text = "📚 Ваши книги:\n\n"
+    text = "📚 <b>Ваши книги:</b>\n\n"
     all_books = []
 
     if read_books:
-        text += "✅ Прочитано:\n"
+        text += "✅ <b>Прочитано:</b>\n"
         for ub in read_books:
             all_books.append(ub)
             rating = f" ⭐{ub.rating}" if ub.rating else ""
             date = f" ({ub.date_read})" if ub.date_read else ""
-            text += f"{len(all_books)}. {ub.book.title} — {ub.book.author}{rating}{date}\n"
+            text += f"{len(all_books)}. <b>{ub.book.title}</b> — {ub.book.author}{rating}{date}\n"
 
     if want_books:
-        text += "\n⏳ Хочу прочитать:\n"
+        text += "\n⏳ <b>Хочу прочитать:</b>\n"
         for ub in want_books:
             all_books.append(ub)
-            text += f"{len(all_books)}. {ub.book.title} — {ub.book.author}\n"
+            text += f"{len(all_books)}. <b>{ub.book.title}</b> — {ub.book.author}\n"
 
-    text += "\n📖 Чтобы посмотреть подробности, отправьте номер книги.\n"
-    text += "❌ Отменить: /cancel"
+    text += "\n📖 Отправьте <b>номер книги</b>, чтобы посмотреть подробности.\n"
+    text += "❌ Напишите /cancel, чтобы выйти."
 
-    await message.answer(text)
+    await message.answer(text, parse_mode="HTML")
     await state.set_state(ViewBooks.waiting_for_number)
     await state.update_data(book_ids=[b.id for b in all_books])
 
@@ -84,19 +87,26 @@ async def cmd_my_books(message: Message, state: FSMContext):
 async def process_book_number(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Просмотр отменён.")
+        await message.answer(
+            "⏹️ Просмотр отменён.\n\n"
+            "Все ваши книги на месте! 📚",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return
 
     data = await state.get_data()
     book_ids = data.get("book_ids", [])
     
     if not message.text.isdigit():
-        await message.answer("Пожалуйста, введите номер из списка.")
+        await message.answer("Пожалуйста, введите <b>номер</b> из списка.", parse_mode="HTML")
         return
 
     num = int(message.text)
     if num < 1 or num > len(book_ids):
-        await message.answer(f"Введите число от 1 до {len(book_ids)}.")
+        await message.answer(
+            f"Введите число от <b>1 до {len(book_ids)}</b>.",
+            parse_mode="HTML"
+        )
         return
 
     book_index = num - 1
@@ -127,24 +137,23 @@ async def process_book_number(message: Message, state: FSMContext):
     if ub.review:
         text += f"\n💭 <b>Мои впечатления:</b>\n{ub.review}\n"
 
-    # === ОТПРАВКА ОБЛОЖКИ (рабочий способ для aiogram 3.x) ===
+    # === ОТПРАВКА ОБЛОЖКИ ===
     cover_path = ub.book.cover_path
-    if cover_path:
-        from pathlib import Path
-        candidates = [
-        BASE_DIR / cover_path,
-        BASE_DIR / "media" / "covers" / Path(cover_path).name,
-        BASE_DIR / "media" / cover_path,
-    ]
     found_path = None
-    for cand in candidates:
-        if cand.exists():
-            found_path = str(cand)
-            break
+
+    if cover_path:
+        candidates = [
+            BASE_DIR / cover_path,
+            BASE_DIR / "media" / "covers" / Path(cover_path).name,
+            BASE_DIR / "media" / cover_path,
+        ]
+        for cand in candidates:
+            if cand.exists():
+                found_path = str(cand)
+                break
 
     if found_path:
         try:
-            from aiogram.types import FSInputFile
             photo = FSInputFile(found_path)
             await message.answer_photo(
                 photo=photo,
@@ -156,6 +165,6 @@ async def process_book_number(message: Message, state: FSMContext):
         except Exception as e:
             print(f"❌ Ошибка отправки обложки: {e}")
 
-# Если фото не отправлено — просто текст
+    # Если фото нет — просто текст
     await message.answer(text, parse_mode="HTML")
     await state.clear()

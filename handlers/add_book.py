@@ -78,14 +78,25 @@ async def process_year(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+
     year = None
     if message.text.isdigit():
-        year = int(message.text)
+        year_num = int(message.text)
+        from datetime import datetime
+        current_year = datetime.now().year
+        if 1450 <= year_num <= current_year + 1:
+            year = year_num
+        else:
+            await message.answer(
+                f"📅 Год издания должен быть корректным. Попробуйте снова!",
+                "Попробуйте снова или пропустите.",
+                parse_mode="HTML"
+            )
+            return
+    # Если не число — пропускаем (оставляем None)
+    
     await state.update_data(year=year)
-    await message.answer(
-        "✨ Книга уже прочитана? Ответьте: <b>да</b> или <b>нет</b>.",
-        parse_mode="HTML"
-    )
+    await message.answer("✨ Книга уже прочитана? Ответьте: <b>да</b> или <b>нет</b>.", parse_mode="HTML")
     await state.set_state(AddBook.status)
 
 @router.message(AddBook.status)

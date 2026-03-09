@@ -1,6 +1,6 @@
 # handlers/delete_book.py
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -38,49 +38,62 @@ def delete_user_book(book_id, telegram_id):
 @router.message(Command("delete_book"))
 async def cmd_delete_book(message: Message, state: FSMContext):
     books = await get_user_books_with_ids(message.from_user.id)
-    print(f"📚 Найдено книг: {len(books)}")  # ← отладка
 
     if not books:
-        await message.answer("📭 У вас нет книг для удаления.")
+        await message.answer(
+            "📭 Похоже, у вас пока нет книг для удаления.\n"
+            "Добавьте первую командой /add_book!"
+        )
         return
 
-    # Формируем список
-    text = "🗑️ Выберите книгу для удаления:\n\n"
+    text = "🗑️ <b>Выберите книгу для удаления:</b>\n\n"
     for i, ub in enumerate(books, 1):
-        status = "✅" if ub.status == "read" else "⏳"
-        text += f"{i}. {status} {ub.book.title} — {ub.book.author}\n"
+        status_icon = "✅" if ub.status == "read" else "⏳"
+        text += f"{i}. {status_icon} <b>{ub.book.title}</b> — {ub.book.author}\n"
     
-    text += "\nВведите номер книги или /cancel для отмены."
-    await message.answer(text)
+    text += "\n💬 Отправьте номер книги или напишите /cancel, чтобы отменить."
+    await message.answer(text, parse_mode="HTML")
     await state.set_state(DeleteBook.waiting_for_number)
-    # Сохраняем список книг в состоянии
     await state.update_data(books=[b.id for b in books])
 
 @router.message(DeleteBook.waiting_for_number)
 async def process_delete_number(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await state.clear()
-        await message.answer("❌ Удаление отменено.")
+        await message.answer(
+            "⏹️ Удаление отменено.\n\n"
+            "Все ваши книги в безопасности! 📚",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return
 
     data = await state.get_data()
     book_ids = data.get("books", [])
     
     if not message.text.isdigit():
-        await message.answer("Пожалуйста, введите номер из списка.")
+        await message.answer("Пожалуйста, введите <b>номер</b> из списка.", parse_mode="HTML")
         return
 
     num = int(message.text)
     if num < 1 or num > len(book_ids):
-        await message.answer(f"Введите число от 1 до {len(book_ids)}.")
+        await message.answer(
+            f"Введите число от <b>1 до {len(book_ids)}</b>.",
+            parse_mode="HTML"
+        )
         return
 
     book_id = book_ids[num - 1]
     success = await delete_user_book(book_id, message.from_user.id)
     
     if success:
-        await message.answer("✅ Книга удалена!")
+        await message.answer(
+            "✅ Книга успешно удалена из вашей библиотеки!\n\n"
+            "Хотите добавить новую? Попробуйте /add_book 📖"
+        )
     else:
-        await message.answer("❌ Не удалось удалить книгу.")
+        await message.answer(
+            "❌ Ой! Что-то пошло не так при удалении.\n"
+            "Попробуйте снова или обратитесь к разработчику."
+        )
     
     await state.clear()

@@ -52,12 +52,15 @@ async def cmd_recommend(message: Message):
     book, info = await get_recommendation(message.from_user.id)
     
     if book is None:
-        await message.answer(f"📭 {info}")
+        await message.answer(
+            f"📭 {info}\n\n"
+            "💡 Совет: добавьте несколько книг через /add_book — и я подберу что-то интересное!"
+        )
         return
 
-    text = f"💡 <b>Рекомендую прочитать:</b>\n\n"
+    text = f"✨ <b>Специально для вас!</b>\n\n"
     text += f"📘 <b>{book.title}</b>\n"
-    text += f"✍️ {book.author}\n"
+    text += f"✍️ Автор: {book.author}\n"
     if book.genre:
         text += f"📚 Жанр: {book.genre}\n"
     if book.year:
@@ -71,10 +74,18 @@ async def cmd_recommend(message: Message):
         full_path = BASE_DIR / book.cover_path
         if full_path.exists():
             try:
-                with open(full_path, 'rb') as photo:
-                    await message.answer_photo(photo, caption=text, parse_mode="HTML")
+                from aiogram.types import FSInputFile
+                photo = FSInputFile(str(full_path))
+                await message.answer_photo(
+                    photo=photo,
+                    caption=text,
+                    parse_mode="HTML"
+                )
                 return
-            except:
-                pass
+            except Exception as e:
+                print(f"❌ Ошибка отправки обложки рекомендации: {e}")
 
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(
+        text + "\n📖 Нравится? Добавьте её в библиотеку командой /add_book!",
+        parse_mode="HTML"
+    )
