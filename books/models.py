@@ -24,3 +24,5 @@ class UserBook(models.Model):
     description = models.TextField("Описание книги", blank=True)      # аннотация
     review = models.TextField("Мои впечатления", blank=True)   
     is_favorite = models.BooleanField("В избранном", default=False)      # личная рецензия
+    date_start = models.DateField(null=True, blank=True, verbose_name="Дата начала чтения")
+    date_end = models.DateField(null=True, blank=True, verbose_name="Дата окончания чтения")

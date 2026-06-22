@@ -21,7 +21,9 @@ class AddBook(StatesGroup):
     description = State()
     review = State()
     rating = State()
-    date_read = State()
+    date_start = State()
+    date_end = State()
+    
 
 @router.message(Command("add_book"))
 async def cmd_add_book(message: Message, state: FSMContext):
@@ -87,16 +89,19 @@ async def process_year(message: Message, state: FSMContext):
         if 1450 <= year_num <= current_year + 1:
             year = year_num
         else:
+            # ✅ ИСПРАВЛЕНО: одно сообщение вместо двух
             await message.answer(
-                f"📅 Год издания должен быть корректным. Попробуйте снова!",
-                "Попробуйте снова или пропустите.",
+                "📅 Год издания должен быть корректным. Попробуйте снова или пропустите.",
                 parse_mode="HTML"
             )
             return
-    # Если не число — пропускаем (оставляем None)
     
+    # Если не число — пропускаем (оставляем None)
     await state.update_data(year=year)
-    await message.answer("✨ Книга уже прочитана? Ответьте: <b>да</b> или <b>нет</b>.", parse_mode="HTML")
+    await message.answer(
+        "✨ Книга уже прочитана? Ответьте: <b>да</b> или <b>нет</b>.",
+        parse_mode="HTML"
+    )
     await state.set_state(AddBook.status)
 
 @router.message(AddBook.status)
@@ -197,27 +202,74 @@ async def process_rating(message: Message, state: FSMContext):
             "Или просто напишите «сегодня» — я сам всё подставлю! 📅",
             parse_mode="HTML"
         )
-        await state.set_state(AddBook.date_read)
+        await state.set_state(AddBook.date_start)
     else:
         await message.answer("Пожалуйста, введите число от 1 до 5.")
 
-@router.message(AddBook.date_read)
-async def process_date_read(message: Message, state: FSMContext):
+@router.message(AddBook.date_start)
+async def process_date_start(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    
     date_str = message.text.strip().lower()
     if date_str == "сегодня":
         from datetime import date
-        date_read = date.today()
+        date_start = date.today()
     else:
         try:
             from datetime import datetime
-            date_read = datetime.strptime(date_str, "%Y-%m-%d").date()
+            date_start = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            await message.answer("Неверный формат. Используйте ГГГГ-ММ-ДД или «сегодня».")
+            await message.answer(
+                "❌ Неверный формат. Используйте <b>ГГГГ-ММ-ДД</b> или «сегодня».",
+                parse_mode="HTML"
+            )
             return
-    await state.update_data(date_read=date_read)
+    
+    await state.update_data(date_start=date_start)
+    await message.answer(
+        "📆 А когда вы <b>закончили</b> читать?\n"
+        "Укажите дату в формате <b>ГГГГ-ММ-ДД</b>\n"
+        "Или напишите «сегодня» 📅",
+        parse_mode="HTML"
+    )
+    await state.set_state(AddBook.date_end)
+
+@router.message(AddBook.date_end)
+async def process_date_end(message: Message, state: FSMContext):
+    if message.text == "/cancel":
+        await cancel_handler(message, state)
+        return
+    
+    data = await state.get_data()
+    date_start = data.get("date_start")
+    
+    date_str = message.text.strip().lower()
+    if date_str == "сегодня":
+        from datetime import date
+        date_end = date.today()
+    else:
+        try:
+            from datetime import datetime
+            date_end = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            await message.answer(
+                "❌ Неверный формат. Используйте <b>ГГГГ-ММ-ДД</b> или «сегодня».",
+                parse_mode="HTML"
+            )
+            return
+    
+    # Проверка: дата окончания не может быть раньше даты начала
+    if date_end < date_start:
+        await message.answer(
+            "⚠️ Дата окончания не может быть раньше даты начала!\n"
+            "Пожалуйста, укажите корректную дату.",
+            parse_mode="HTML"
+        )
+        return
+    
+    await state.update_data(date_end=date_end)
     await save_book_to_db(message, state)
 
 @sync_to_async
@@ -237,12 +289,14 @@ def _save_to_db(user_id, username, data):
                 "cover_path": data.get("cover_path", "")
             }
         )
+        # ✅ ИСПРАВЛЕНО: используем date_start и date_end вместо date_read
         UserBook.objects.create(
             user=user,
             book=book,
             status=data["status"],
             rating=data.get("rating"),
-            date_read=data.get("date_read"),
+            date_start=data.get("date_start"),  # ← Новое поле
+            date_end=data.get("date_end"),      # ← Новое поле
             description=data.get("description", ""),
             review=data.get("review", "")
         )
