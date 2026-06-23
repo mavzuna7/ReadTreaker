@@ -5,6 +5,8 @@ from aiogram.filters import Command
 from asgiref.sync import sync_to_async
 import io
 from aiogram.types import BufferedInputFile
+from docx import Document
+from docx.shared import Pt
 
 router = Router()
 
@@ -30,51 +32,147 @@ async def cmd_export(message: Message):
 
     if not books:
         await message.answer(
-            "📭 Похоже, у вас пока нет книг для экспорта.\n"
-            "Добавьте первую командой /add_book!"
+            "📭 У вас пока нет книг для экспорта."
         )
         return
-
-    lines = [
-        "📚 Моя библиотека — ReadTreakerBot",
-        "=" * 50,
-        ""
+    
+    read_books = [
+    b for b in books
+    if b.status == "read"
     ]
 
-    for ub in books:
-        status_icon = "✅" if ub.status == "read" else "⏳"
-        line = f"{status_icon} <b>{ub.book.title}</b> — {ub.book.author}"
-        
-        details = []
+    want_books = [
+        b for b in books
+        if b.status == "want_to_read"
+    ]
+
+    ratings = [
+        b.rating
+        for b in read_books
+        if b.rating
+    ]
+
+    avg_rating = (
+        round(sum(ratings) / len(ratings), 1)
+        if ratings else 0
+    )
+
+    doc = Document()
+
+    title = doc.add_heading("📚 Моя библиотека ReadTreaker", level=1)
+    title.alignment = 1  # по центру
+
+    doc.add_paragraph(
+    f"📚 Всего книг: {len(books)}"
+    )
+
+    doc.add_paragraph(
+        f"✅ Прочитано: {len(read_books)}"
+    )
+
+    doc.add_paragraph(
+        f"⏳ Хочу прочитать: {len(want_books)}"
+    )
+
+    if avg_rating:
+        doc.add_paragraph(
+            f"⭐ Средняя оценка: {avg_rating}"
+        )
+
+    doc.add_page_break()
+
+    doc.add_heading(
+    "✅ Прочитано",
+    level=1
+    )
+
+    for num, ub in enumerate(read_books, start=1):
+
+        doc.add_heading(
+            f"{num}. {ub.book.title}",
+            level=2
+        )
+
+        p = doc.add_paragraph()
+
+        p.add_run("Автор: ").bold = True
+        p.add_run(f"{ub.book.author}\n")
+
         if ub.book.genre:
-            details.append(f"Жанр: {ub.book.genre}")
+            p.add_run("Жанр: ").bold = True
+            p.add_run(f"{ub.book.genre}\n")
+
         if ub.book.year:
-            details.append(f"Год: {ub.book.year}")
-        if ub.status == "read":
-            if ub.rating:
-                details.append(f"Оценка: {ub.rating}")
-            if ub.date_read:
-                details.append(f"Дата: {ub.date_read}")
+            p.add_run("Год: ").bold = True
+            p.add_run(f"{ub.book.year}\n")
+
+        if ub.rating:
+            p.add_run("Оценка: ").bold = True
+            p.add_run(f"{ub.rating}/5\n")
+
+        if ub.date_start:
+            p.add_run("Начато: ").bold = True
+            p.add_run(f"{ub.date_start}\n")
+
+        if ub.date_end:
+            p.add_run("Завершено: ").bold = True
+            p.add_run(f"{ub.date_end}\n")
+
         if ub.description:
-            desc = ub.description[:60] + "..." if len(ub.description) > 60 else ub.description
-            details.append(f"Описание: {desc}")
+            doc.add_paragraph(
+                f"📖 Описание:\n{ub.description}"
+            )
+
         if ub.review:
-            rev = ub.review[:60] + "..." if len(ub.review) > 60 else ub.review
-            details.append(f"Рецензия: {rev}")
+            doc.add_paragraph(
+                f"💭 Мои впечатления:\n{ub.review}"
+            )
 
-        if details:
-            line += " | " + " | ".join(details)
-        
-        lines.append(line)
+        doc.add_paragraph(
+            "─" * 40
+        )
 
-    text = "\n".join(lines)
+    doc.add_page_break()
 
-    # Отправляем как документ
-    file_bytes = text.encode('utf-8')
-    document = BufferedInputFile(file_bytes, filename="biblioteka.txt")
+    doc.add_heading(
+        "⏳ Хочу прочитать",
+        level=1
+    )
+
+    for num, ub in enumerate(want_books, start=1):
+
+        doc.add_heading(
+            f"{num}. {ub.book.title}",
+            level=2
+        )
+
+        p = doc.add_paragraph()
+
+        p.add_run("Автор: ").bold = True
+        p.add_run(f"{ub.book.author}\n")
+
+        if ub.book.genre:
+            p.add_run("Жанр: ").bold = True
+            p.add_run(f"{ub.book.genre}\n")
+
+        if ub.book.year:
+            p.add_run("Год: ").bold = True
+            p.add_run(f"{ub.book.year}\n")
+
+        doc.add_paragraph(
+            "─" * 40
+        )
+
+    file_stream = io.BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+
+    document = BufferedInputFile(
+        file_stream.read(),
+        filename="ReadTreaker_Library.docx"
+    )
 
     await message.answer_document(
         document=document,
-        caption="📥 Ваша библиотека успешно экспортирована!\n\n"
-                "Теперь вы можете сохранить её на устройстве или распечатать. 📖✨"
+        caption="📥 Экспорт библиотеки завершён!"
     )
