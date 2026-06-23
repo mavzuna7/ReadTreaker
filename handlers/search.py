@@ -6,28 +6,68 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from asgiref.sync import sync_to_async
 
+
 router = Router()
 
 class SearchBooks(StatesGroup):
     selecting_field = State()
     entering_query = State()
     viewing_results = State()
+    after_view = State()
+
+def search_after_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔍 Новый поиск")],
+            [KeyboardButton(text="❌ Выход")]
+        ],
+        resize_keyboard=True
+    )
 
 @sync_to_async
 def search_books_by_field(telegram_id, field, query):
     from books.models import TelegramUser, UserBook
+
     try:
-        user = TelegramUser.objects.get(telegram_id=telegram_id)
-        if field == "title":
-            books = list(UserBook.objects.filter(user=user, book__title__icontains=query).select_related('book'))
-        elif field == "author":
-            books = list(UserBook.objects.filter(user=user, book__author__icontains=query).select_related('book'))
-        elif field == "genre":
-            books = list(UserBook.objects.filter(user=user, book__genre__icontains=query).select_related('book'))
-        else:
-            books = []
-        return books
-    except:
+        user = TelegramUser.objects.get(
+            telegram_id=telegram_id
+        )
+
+        books = list(
+            UserBook.objects.filter(
+                user=user
+            ).select_related("book")
+        )
+
+        query = query.lower().strip()
+
+        result = []
+
+        for ub in books:
+
+            if field == "title":
+                value = (ub.book.title or "").lower()
+
+            elif field == "author":
+                value = (ub.book.author or "").lower()
+
+            elif field == "genre":
+                value = (ub.book.genre or "").lower()
+
+            else:
+                continue
+
+            if query in value:
+                result.append(ub)
+
+        print("НАЙДЕНО:", len(result))
+
+        for book in result:
+            print(book.book.title)
+
+        return result
+
+    except TelegramUser.DoesNotExist:
         return []
 
 @router.message(Command("search"))
@@ -92,7 +132,7 @@ async def process_query(message: Message, state: FSMContext):
         )
         return
 
-    query = message.text.strip()
+    query = message.text.strip().lower()
     if not query:
         await message.answer("Пожалуйста, введите непустой запрос.")
         return
@@ -102,21 +142,26 @@ async def process_query(message: Message, state: FSMContext):
 
     books = await search_books_by_field(message.from_user.id, field, query)
 
+    print("books =", len(books))
+
     if not books:
         await message.answer(
-            "🤔 Ничего не найдено по запросу «<b>{}</b>».\n\n"
-            "💡 Попробуйте уточнить название, фамилию автора или жанр.".format(query),
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove()
+            f"🤔 Ничего не найдено по запросу «<b>{query}</b>».\n\n"
+            "💡 Попробуйте другое ключевое слово.\n"
+            "❌ Или напишите /cancel.",
+            parse_mode="HTML"
         )
-        await state.clear()
         return
 
     text = f"✨ Найдено <b>{len(books)}</b> книга(и) по запросу «<b>{query}</b>»:\n\n"
+    
     for i, ub in enumerate(books, 1):
         status_icon = "✅" if ub.status == "read" else "⏳"
         rating = f" ⭐{ub.rating}" if ub.rating else ""
-        date = f" ({ub.date_read})" if ub.date_read else ""
+        date = ""
+
+        if ub.date_start and ub.date_end:
+            date = f" ({ub.date_start} → {ub.date_end})"
         text += f"{i}. {status_icon} <b>{ub.book.title}</b> — {ub.book.author}{rating}{date}\n"
 
     text += "\n📖 Отправьте <b>номер</b> книги, чтобы посмотреть подробности.\n"
@@ -170,8 +215,12 @@ async def process_view_result(message: Message, state: FSMContext):
     if ub.status == "read":
         if ub.rating:
             text += f"⭐ Оценка: {ub.rating}\n"
-        if ub.date_read:
-            text += f"📆 Дата прочтения: {ub.date_read}\n"
+        if ub.date_start and ub.date_end:
+            text += (
+                f"📅 Период чтения:\n"
+                f"• Начато: {ub.date_start}\n"
+                f"• Завершено: {ub.date_end}\n"
+            )
     
     if ub.description:
         text += f"\n📖 <b>Описание:</b>\n{ub.description}\n"
@@ -202,10 +251,69 @@ async def process_view_result(message: Message, state: FSMContext):
                 caption=caption,
                 parse_mode="HTML"
             )
-            await state.clear()
+
+            await message.answer(
+                "Что хотите сделать дальше?",
+                reply_markup=search_after_keyboard()
+            )
+
+            print("ДОШЛИ ДО КОНЦА process_view_result")
+
+            await state.set_state(SearchBooks.after_view)
             return
+        
         except Exception as e:
             print(f"❌ Ошибка отправки обложки в поиске: {e}")
 
-    await message.answer(text, parse_mode="HTML")
-    await state.clear()
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=search_after_keyboard()
+    )
+    print("ДОШЛИ ДО КОНЦА process_view_result")
+
+    await state.set_state(SearchBooks.after_view)
+
+@router.message(SearchBooks.after_view)
+async def process_after_view(message: Message, state: FSMContext):
+
+    text = message.text.strip()
+
+    if text == "🔍 Новый поиск":
+
+        kb = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="По названию")],
+                [KeyboardButton(text="По автору")],
+                [KeyboardButton(text="По жанру")],
+                [KeyboardButton(text="Отмена")]
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+
+        await message.answer(
+            "🔍 <b>Как будем искать?</b>\n\n"
+            "Выберите поле для поиска:",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+
+        await state.set_state(SearchBooks.selecting_field)
+        return
+
+    if text == "❌ Выход" or text == "/cancel":
+
+        await state.clear()
+
+        await message.answer(
+            "📚 Поиск завершён.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return
+
+    await message.answer(
+        "Выберите действие:\n"
+        "🔍 Новый поиск\n"
+        "❌ Выход"
+    )

@@ -109,20 +109,27 @@ async def process_status(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+
     text = message.text.lower().strip()
+
     if text in ["да", "yes", "y"]:
         await state.update_data(status="read")
+
     elif text in ["нет", "no", "n"]:
         await state.update_data(status="want_to_read")
+
     else:
-        await message.answer("Пожалуйста, ответьте: <b>да</b> или <b>нет</b>.", parse_mode="HTML")
+        await message.answer(
+            "Пожалуйста, ответьте: <b>да</b> или <b>нет</b>.",
+            parse_mode="HTML"
+        )
         return
 
     await message.answer(
-        "🖼️ Отправьте <b>обложку книги</b> (фото) или напишите «пропустить».\n\n"
-        "Это сделает вашу библиотеку ещё красивее! ✨",
+        "🖼 Отправьте <b>обложку книги</b> (фото) или напишите «пропустить».",
         parse_mode="HTML"
-    )
+        )
+
     await state.set_state(AddBook.cover)
 
 @router.message(AddBook.cover)
@@ -165,13 +172,22 @@ async def process_description(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
-    await state.update_data(description=message.text.strip())
+
+    description = ""
+
+    if message.text:
+        text = message.text.strip().lower()
+
+        if text != "пропустить":
+            description = message.text.strip()
+
+    await state.update_data(description=description)
+
     data = await state.get_data()
+
     if data["status"] == "read":
         await message.answer(
-            "💭 А теперь — самое интересное! Напишите <b>ваши впечатления</b> от книги.\n"
-            "Что запомнилось? Что тронуло? Это будет ваша личная рецензия!",
-            parse_mode="HTML"
+            "💭 А теперь — самое интересное! Напишите ваши впечатления от книги."
         )
         await state.set_state(AddBook.review)
     else:
@@ -289,6 +305,11 @@ def _save_to_db(user_id, username, data):
                 "cover_path": data.get("cover_path", "")
             }
         )
+
+        if data.get("cover_path"):
+            book.cover_path = data["cover_path"]
+            book.save(update_fields=["cover_path"])
+
         # ✅ ИСПРАВЛЕНО: используем date_start и date_end вместо date_read
         UserBook.objects.create(
             user=user,

@@ -1,13 +1,14 @@
 # handlers/my_books.py
 import os
 from pathlib import Path
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from asgiref.sync import sync_to_async
 from aiogram.types import FSInputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 router = Router()
@@ -33,20 +34,26 @@ def get_user_books_with_ids(telegram_id):
         return [], []
 
 @sync_to_async
-def get_book_by_index(telegram_id, index):
-    from books.models import TelegramUser, UserBook
+def get_book_by_id(userbook_id):
+    from books.models import UserBook
+
     try:
-        user = TelegramUser.objects.get(telegram_id=telegram_id)
-        all_books = list(
-            UserBook.objects.filter(user=user)
-            .select_related('book')
-            .order_by('-date_read', 'id')
-        )
-        if 0 <= index < len(all_books):
-            return all_books[index]
+        return UserBook.objects.select_related('book').get(id=userbook_id)
+    except UserBook.DoesNotExist:
         return None
-    except:
-        return None
+
+def books_keyboard(all_books):
+    buttons = []
+
+    for ub in all_books:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"📘 {ub.book.title}",
+                callback_data=f"book_{ub.id}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 @router.message(Command("my_books"))
 async def cmd_my_books(message: Message, state: FSMContext):
@@ -58,113 +65,93 @@ async def cmd_my_books(message: Message, state: FSMContext):
             "Добавьте первую командой /add_book!"
         )
         return
-
-    text = "📚 <b>Ваши книги:</b>\n\n"
-    all_books = []
-
-    if read_books:
-        text += "✅ <b>Прочитано:</b>\n"
-        for ub in read_books:
-            all_books.append(ub)
-            rating = f" ⭐{ub.rating}" if ub.rating else ""
-            date = f" ({ub.date_read})" if ub.date_read else ""
-            text += f"{len(all_books)}. <b>{ub.book.title}</b> — {ub.book.author}{rating}{date}\n"
-
-    if want_books:
-        text += "\n⏳ <b>Хочу прочитать:</b>\n"
-        for ub in want_books:
-            all_books.append(ub)
-            text += f"{len(all_books)}. <b>{ub.book.title}</b> — {ub.book.author}\n"
-
-    text += "\n📖 Отправьте <b>номер книги</b>, чтобы посмотреть подробности.\n"
-    text += "❌ Напишите /cancel, чтобы выйти."
-
-    await message.answer(text, parse_mode="HTML")
-    await state.set_state(ViewBooks.waiting_for_number)
-    await state.update_data(book_ids=[b.id for b in all_books])
-
-@router.message(ViewBooks.waiting_for_number)
-async def process_book_number(message: Message, state: FSMContext):
-    if message.text == "/cancel":
-        await state.clear()
-        await message.answer(
-            "⏹️ Просмотр отменён.\n\n"
-            "Все ваши книги на месте! 📚",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return
-
-    data = await state.get_data()
-    book_ids = data.get("book_ids", [])
     
-    if not message.text.isdigit():
-        await message.answer("Пожалуйста, введите <b>номер</b> из списка.", parse_mode="HTML")
-        return
+    all_books = read_books + want_books
 
-    num = int(message.text)
-    if num < 1 or num > len(book_ids):
-        await message.answer(
-            f"Введите число от <b>1 до {len(book_ids)}</b>.",
-            parse_mode="HTML"
-        )
-        return
+    await message.answer(
+        "📚 <b>Ваша библиотека</b>\n\nВыберите книгу:",
+        parse_mode="HTML",
+        reply_markup=books_keyboard(all_books)
+    )
 
-    book_index = num - 1
-    ub = await get_book_by_index(message.from_user.id, book_index)
     
+
+@router.callback_query(F.data.startswith("book_"))
+async def show_book(callback: CallbackQuery):
+    userbook_id = int(callback.data.split("_")[1])
+
+    ub = await get_book_by_id(userbook_id)
+
     if not ub:
-        await message.answer("❌ Книга не найдена.")
-        await state.clear()
+        await callback.answer("Книга не найдена")
         return
 
-    # Формируем подробную карточку
     text = f"📘 <b>{ub.book.title}</b>\n"
     text += f"✍️ Автор: {ub.book.author}\n"
+
     if ub.book.genre:
         text += f"📚 Жанр: {ub.book.genre}\n"
+
     if ub.book.year:
         text += f"📅 Год: {ub.book.year}\n"
+
     text += f"📌 Статус: {'Прочитано' if ub.status == 'read' else 'Хочу прочитать'}\n"
-    
-    if ub.status == "read":
-        if ub.rating:
-            text += f"⭐ Оценка: {ub.rating}\n"
-        if ub.date_read:
-            text += f"📆 Дата прочтения: {ub.date_read}\n"
-    
+
+    if ub.rating:
+        text += f"⭐ Оценка: {ub.rating}\n"
+
+    if ub.date_start and ub.date_end:
+        text += (
+            f"\n📅 Период чтения:\n"
+            f"• Начато: {ub.date_start}\n"
+            f"• Завершено: {ub.date_end}\n"
+        )
+
     if ub.description:
         text += f"\n📖 <b>Описание:</b>\n{ub.description}\n"
+
     if ub.review:
         text += f"\n💭 <b>Мои впечатления:</b>\n{ub.review}\n"
 
-    # === ОТПРАВКА ОБЛОЖКИ ===
     cover_path = ub.book.cover_path
     found_path = None
 
+    print("=" * 50)
+    print("cover_path из БД:", ub.book.cover_path)
+    print("=" * 50)
+
     if cover_path:
-        candidates = [
-            BASE_DIR / cover_path,
-            BASE_DIR / "media" / "covers" / Path(cover_path).name,
-            BASE_DIR / "media" / cover_path,
-        ]
+        full_path = BASE_DIR / cover_path
+
+        if cover_path:
+            candidates = [
+                BASE_DIR / cover_path,
+                BASE_DIR / "media" / "covers" / Path(cover_path).name,
+                BASE_DIR / "media" / cover_path,
+            ]
+
         for cand in candidates:
+            print("Проверяем:", cand)
+            print("Существует:", cand.exists())
+
             if cand.exists():
                 found_path = str(cand)
+                print("НАЙДЕН ФАЙЛ:", found_path)
                 break
 
-    if found_path:
-        try:
-            photo = FSInputFile(found_path)
-            await message.answer_photo(
+        if full_path.exists():
+            photo = FSInputFile(str(full_path))
+
+            await callback.message.answer_photo(
                 photo=photo,
                 caption=text[:1024],
                 parse_mode="HTML"
             )
-            await state.clear()
-            return
-        except Exception as e:
-            print(f"❌ Ошибка отправки обложки: {e}")
 
-    # Если фото нет — просто текст
-    await message.answer(text, parse_mode="HTML")
-    await state.clear()
+            await callback.answer()
+            return
+
+    await callback.message.answer(
+        text,
+        parse_mode="HTML"
+    )
