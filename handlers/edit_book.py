@@ -11,6 +11,13 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 router = Router()
 
+async def check_command(message: Message):
+    if message.text and message.text.startswith("/"):
+        await message.answer(
+            "⚠️ Сначала завершите поиск или используйте /cancel."
+        )
+        return True
+    return False
 class EditBook(StatesGroup):
     selecting_book = State()
     selecting_field = State()
@@ -71,6 +78,8 @@ async def process_select_book(message: Message, state: FSMContext):
             "Все ваши данные остались без изменений! 📚",
             reply_markup=ReplyKeyboardRemove()
         )
+
+    if await check_command(message):
         return
 
     data = await state.get_data()
@@ -115,6 +124,9 @@ async def process_select_field(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         return
+    
+    if await check_command(message):
+        return
 
     field_map = {
         "Описание": "description",
@@ -147,6 +159,9 @@ async def process_new_value(message: Message, state: FSMContext):
     data = await state.get_data()
     book_id = data["editing_book_id"]
     field = data["editing_field"]
+
+    if await check_command(message):
+        return
 
     if field == "rating":
         if not message.text.isdigit() or not (1 <= int(message.text) <= 5):

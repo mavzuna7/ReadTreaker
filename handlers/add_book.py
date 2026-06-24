@@ -11,6 +11,14 @@ from asgiref.sync import sync_to_async
 BASE_DIR = Path(__file__).resolve().parent.parent
 router = Router()
 
+async def check_command(message: Message):
+    if message.text and message.text.startswith("/"):
+        await message.answer(
+            "⚠️ Сначала завершите текущую операцию или используйте /cancel."
+        )
+        return True
+    return False
+
 class AddBook(StatesGroup):
     title = State()
     author = State()
@@ -42,6 +50,9 @@ async def process_title(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    if await check_command(message):
+        return
+    
     await state.update_data(title=message.text.strip())
     await message.answer(
         "Отличный выбор! 👏\n\n"
@@ -55,6 +66,9 @@ async def process_author(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    if await check_command(message):
+        return
+    
     await state.update_data(author=message.text.strip())
     await message.answer(
         "📚 Какой <b>жанр</b> у этой книги?\n"
@@ -68,6 +82,9 @@ async def process_genre(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    if await check_command(message):
+        return
+    
     await state.update_data(genre=message.text.strip())
     await message.answer(
         "📅 Укажите <b>год издания</b> (можно пропустить, просто отправьте любое сообщение).",
@@ -79,6 +96,9 @@ async def process_genre(message: Message, state: FSMContext):
 async def process_year(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
+        return
+    
+    if await check_command(message):
         return
 
     year = None
@@ -109,6 +129,9 @@ async def process_status(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    
+    if await check_command(message):
+        return
 
     text = message.text.lower().strip()
 
@@ -136,6 +159,9 @@ async def process_status(message: Message, state: FSMContext):
 async def process_cover(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
+        return
+    
+    if await check_command(message):
         return
 
     cover_path = ""
@@ -172,6 +198,9 @@ async def process_description(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    
+    if await check_command(message):
+        return
 
     description = ""
 
@@ -198,6 +227,10 @@ async def process_review(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    
+    if await check_command(message):
+        return
+
     await state.update_data(review=message.text.strip())
     await message.answer(
         "⭐ Как бы вы оценили эту книгу по 5-балльной шкале?\n"
@@ -211,6 +244,10 @@ async def process_rating(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
         return
+    
+    if await check_command(message):
+        return
+
     if message.text.isdigit() and 1 <= int(message.text) <= 5:
         await state.update_data(rating=int(message.text))
         await message.answer(
@@ -228,6 +265,9 @@ async def process_date_start(message: Message, state: FSMContext):
         await cancel_handler(message, state)
         return
     
+    if await check_command(message):
+        return
+    
     date_str = message.text.strip().lower()
     if date_str == "сегодня":
         from datetime import date
@@ -242,6 +282,35 @@ async def process_date_start(message: Message, state: FSMContext):
                 parse_mode="HTML"
             )
             return
+    from datetime import date
+
+    if date_start.year < 1950:
+        await message.answer(
+            "❌ Дата начала чтения не может быть раньше 1950 года."
+        )
+        return
+
+    if date_start > date.today():
+        await message.answer(
+            "❌ Дата начала чтения не может быть в будущем."
+        )
+        return
+        
+    from datetime import date
+
+    today = date.today()
+
+    if date_start > today:
+        await message.answer(
+            "❌ Дата начала чтения не может быть в будущем."
+        )
+        return
+
+    if date_start.year < 1450:
+        await message.answer(
+            "❌ Укажите корректную дату начала чтения."
+        )
+        return
     
     await state.update_data(date_start=date_start)
     await message.answer(
@@ -256,6 +325,9 @@ async def process_date_start(message: Message, state: FSMContext):
 async def process_date_end(message: Message, state: FSMContext):
     if message.text == "/cancel":
         await cancel_handler(message, state)
+        return
+    
+    if await check_command(message):
         return
     
     data = await state.get_data()
@@ -275,6 +347,21 @@ async def process_date_end(message: Message, state: FSMContext):
                 parse_mode="HTML"
             )
             return
+    from datetime import date
+
+    today = date.today()
+
+    if date_end > today:
+        await message.answer(
+            "❌ Дата окончания не может быть в будущем."
+        )
+        return
+
+    if date_end.year < 1450:
+        await message.answer(
+            "❌ Укажите корректную дату окончания."
+        )
+        return
     
     # Проверка: дата окончания не может быть раньше даты начала
     if date_end < date_start:

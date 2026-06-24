@@ -9,6 +9,14 @@ from asgiref.sync import sync_to_async
 
 router = Router()
 
+async def check_command(message: Message):
+    if message.text and message.text.startswith("/"):
+        await message.answer(
+            "⚠️ Сначала завершите поиск или используйте /cancel."
+        )
+        return True
+    return False
+
 class SearchBooks(StatesGroup):
     selecting_field = State()
     entering_query = State()
@@ -131,6 +139,9 @@ async def process_query(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove()
         )
         return
+    
+    if await check_command(message):
+        return
 
     query = message.text.strip().lower()
     if not query:
@@ -179,6 +190,9 @@ async def process_view_result(message: Message, state: FSMContext):
             "⏹️ Просмотр результатов отменён.",
             reply_markup=ReplyKeyboardRemove()
         )
+        return
+    
+    if await check_command(message):
         return
 
     if not message.text.isdigit():
