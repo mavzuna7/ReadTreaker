@@ -12,7 +12,7 @@ async def cmd_start(message: Message):
     
     await message.answer(
         f"Привет, {first_name}! 👋\n\n"
-        "✨ Я — <b>ReadTreakerBot</b>, ваш личный книжный трекер!\n\n"
+        "✨ Я — <b>ReadTrackerBot</b>, ваш личный книжный трекер!\n\n"
         "📚 С моей помощью вы можете:\n"
         "• Добавлять книги в библиотеку\n"
         "• Просматривать свою коллекцию\n"

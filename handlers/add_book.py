@@ -383,15 +383,13 @@ def _save_to_db(user_id, username, data):
             telegram_id=user_id,
             defaults={"username": username}
         )
-        book, created = Book.objects.get_or_create(
+        book = Book.objects.create(
             title=data["title"],
-            defaults={
-                "author": data.get("author", ""),
-                "genre": data.get("genre", ""),
-                "year": data.get("year"),
-                "cover_path": data.get("cover_path", "")
-            }
-        )
+            author=data.get("author", ""),
+            genre=data.get("genre", ""),
+            year=data.get("year"),
+            cover_path=data.get("cover_path", "")
+        )   
 
         if data.get("cover_path"):
             book.cover_path = data["cover_path"]

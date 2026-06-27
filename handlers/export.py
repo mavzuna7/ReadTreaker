@@ -6,7 +6,7 @@ from asgiref.sync import sync_to_async
 import io
 from aiogram.types import BufferedInputFile
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 
 router = Router()
 
@@ -59,16 +59,22 @@ async def cmd_export(message: Message):
 
     doc = Document()
 
-    title = doc.add_heading("📚 Моя библиотека ReadTreaker", level=1)
-    title.alignment = 1  # по центру
+    p = doc.add_paragraph()
+    run = p.add_run("📚 Моя библиотека ReadTracker")
+    run.bold = True
+    run.font.size = Pt(18)
+    run.font.color.rgb = RGBColor(0, 0, 0)
+    p.alignment = 1  
 
     doc.add_paragraph(
     f"📚 Всего книг: {len(books)}"
     )
 
-    doc.add_paragraph(
-        f"✅ Прочитано: {len(read_books)}"
-    )
+    p = doc.add_paragraph()
+    run = p.add_run("✅ Прочитано")
+    run.bold = True
+    run.font.size = Pt(16)
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
     doc.add_paragraph(
         f"⏳ Хочу прочитать: {len(want_books)}"
@@ -81,17 +87,19 @@ async def cmd_export(message: Message):
 
     doc.add_page_break()
 
-    doc.add_heading(
-    "✅ Прочитано",
-    level=1
-    )
+    p = doc.add_paragraph()
+    run = p.add_run("✅ Прочитано")
+    run.bold = True
+    run.font.size = Pt(16)
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
     for num, ub in enumerate(read_books, start=1):
 
-        doc.add_heading(
-            f"{num}. {ub.book.title}",
-            level=2
-        )
+        p = doc.add_paragraph()
+        run = p.add_run(f"{num}. {ub.book.title}")
+        run.bold = True
+        run.font.size = Pt(14)
+        run.font.color.rgb = RGBColor(0, 0, 0)
 
         p = doc.add_paragraph()
 
@@ -134,17 +142,19 @@ async def cmd_export(message: Message):
 
     doc.add_page_break()
 
-    doc.add_heading(
-        "⏳ Хочу прочитать",
-        level=1
-    )
+    p = doc.add_paragraph()
+    run = p.add_run("⏳ Хочу прочитать")
+    run.bold = True
+    run.font.size = Pt(16)
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
     for num, ub in enumerate(want_books, start=1):
 
-        doc.add_heading(
-            f"{num}. {ub.book.title}",
-            level=2
-        )
+        p = doc.add_paragraph()
+        run = p.add_run(f"{num}. {ub.book.title}")
+        run.bold = True
+        run.font.size = Pt(14)
+        run.font.color.rgb = RGBColor(0, 0, 0)
 
         p = doc.add_paragraph()
 
@@ -169,7 +179,7 @@ async def cmd_export(message: Message):
 
     document = BufferedInputFile(
         file_stream.read(),
-        filename="ReadTreaker_Library.docx"
+        filename="ReadTracker_Library.docx"
     )
 
     await message.answer_document(
